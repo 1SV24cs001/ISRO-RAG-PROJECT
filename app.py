@@ -2,8 +2,6 @@
 import os
 import streamlit as st
 
-from rag_engine import RAGEngine
-
 
 # ==========================================
 # PAGE CONFIGURATION
@@ -73,18 +71,29 @@ st.divider()
 # API CONFIGURATION
 # ==========================================
 
-api_key = st.secrets.get(
-    "GROQ_API_KEY",
-    os.getenv("GROQ_API_KEY", "")
-)
+try:
+
+    api_key = st.secrets.get(
+        "GROQ_API_KEY",
+        os.getenv("GROQ_API_KEY", "")
+    )
+
+except Exception:
+
+    api_key = os.getenv("GROQ_API_KEY", "")
+
 
 if not api_key:
+
     st.error("Groq API key is missing.")
+
     st.info(
         "Add GROQ_API_KEY in Streamlit Cloud "
         "Settings > Secrets."
     )
+
     st.stop()
+
 
 os.environ["GROQ_API_KEY"] = api_key
 
@@ -95,6 +104,8 @@ os.environ["GROQ_API_KEY"] = api_key
 
 @st.cache_resource
 def load_rag_engine():
+
+    from rag_engine import RAGEngine
 
     engine = RAGEngine(data_dir="data")
 
@@ -111,7 +122,7 @@ try:
 
 except Exception as e:
 
-    st.error("Unable to load ISRO documents.")
+    st.error("Unable to load ISRO knowledge base.")
 
     st.exception(e)
 
