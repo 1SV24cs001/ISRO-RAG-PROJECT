@@ -305,33 +305,33 @@ USER QUESTION:
 ANSWER:
 """
 
-        # Call Groq API
-        response = self.client.chat.completions.create(
+       # Call Groq API
+response = self.client.chat.completions.create(
 
-            model="llama-3.3-70b-versatile",
+    model="openai/gpt-oss-120b",
 
-            messages=[
+    messages=[
 
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an accurate ISRO "
-                        "document-based question answering assistant."
-                    )
-                },
+        {
+            "role": "system",
+            "content": (
+                "You are an accurate ISRO "
+                "document-based question answering assistant."
+            )
+        },
 
-                {
-                    "role": "user",
-                    "content": prompt
-                }
+        {
+            "role": "user",
+            "content": prompt
+        }
 
-            ],
+    ],
 
-            temperature=0.2,
+    temperature=0.2,
 
-            max_tokens=1500
+    max_tokens=1500
 
-        )
+)
 
         answer = response.choices[0].message.content
 
