@@ -1,7 +1,7 @@
 streamlit
 groq
-sentence-transformers
+numpy<2
 faiss-cpu
-numpy
+sentence-transformers
 pypdf
 python-docx
