@@ -23,8 +23,8 @@ st.markdown("""
 <style>
 
 .stApp {
-    background-color: #0b1220;
-    color: white;
+    background-color: #000000;
+    color: black;
 }
 
 .main-title {
