@@ -7,7 +7,7 @@ import faiss
 from pypdf import PdfReader
 from docx import Document
 from sentence_transformers import SentenceTransformer
-from openai import OpenAI
+from groq import Groq
 
 
 class RAGEngine:
@@ -19,8 +19,8 @@ class RAGEngine:
             "all-MiniLM-L6-v2"
         )
 
-        self.client = OpenAI(
-            api_key=os.getenv("OPENAI_API_KEY")
+        self.client = Groq(
+            api_key=os.getenv("GROQ_API_KEY")
         )
 
         self.chunks = []
@@ -154,23 +154,20 @@ class RAGEngine:
 
     def ask(self, question):
 
-        results = self.retrieve(question)
+    results = self.retrieve(question)
 
-        context = "\n\n".join(
-            f"Source: {r['source']}\n{r['text']}"
-            for r in results
-        )
+    context = "\n\n".join(
+        f"Source: {r['source']}\n{r['text']}"
+        for r in results
+    )
 
-        prompt = f"""
+    prompt = f"""
 You are an ISRO information assistant.
 
-Answer the user's question using ONLY
-the provided document context.
+Answer the question using ONLY the
+provided document context.
 
-If the answer is not available in the context,
-clearly say that the uploaded documents
-do not contain enough information.
-
+If the answer is unavailable, say so.
 Do not invent facts.
 
 DOCUMENT CONTEXT:
@@ -182,24 +179,24 @@ USER QUESTION:
 Give a clear and easy-to-understand answer.
 """
 
-        response = self.client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an accurate ISRO RAG assistant."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            temperature=0.2
-        )
+    response = self.client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are an accurate ISRO RAG assistant."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        temperature=0.2
+    )
 
-        return {
-            "answer": response.choices[0].message.content,
-            "sources": list(set(
-                r["source"] for r in results
-            ))
-        }
+    return {
+        "answer": response.choices[0].message.content,
+        "sources": list(set(
+            r["source"] for r in results
+        ))
+    }
