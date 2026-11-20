@@ -1,284 +1,257 @@
-
 import os
-from pathlib import Path
+import streamlit as st
 
-import faiss
-import numpy as np
-from groq import Groq
-from sentence_transformers import SentenceTransformer
+from rag_engine import RAGEngine
 
 
-class RAGEngine:
+# ---------------------------------
+# PAGE CONFIGURATION
+# ---------------------------------
 
-    def __init__(self, data_dir="data"):
+st.set_page_config(
+    page_title="ISRO RAG Assistant",
+    page_icon="🚀",
+    layout="wide"
+)
 
-        self.data_dir = Path(data_dir)
 
-        self.documents = []
-        self.vector_store = None
+# ---------------------------------
+# CUSTOM DESIGN
+# ---------------------------------
 
-        # Groq API configuration
-        api_key = os.getenv("GROQ_API_KEY")
+st.markdown("""
+<style>
 
-        if not api_key:
-            raise ValueError(
-                "GROQ_API_KEY is missing. "
-                "Please configure your API key."
-            )
+.stApp {
+    background-color: #0e1117;
+    color: white;
+}
 
-        self.client = Groq(api_key=api_key)
+.main-title {
+    text-align: center;
+    color: #00c8ff;
+    font-size: 38px;
+    font-weight: bold;
+}
 
-        self.model_name = os.getenv(
-            "GROQ_MODEL",
-            "llama-3.3-70b-versatile"
-        )
+.subtitle {
+    text-align: center;
+    color: #cccccc;
+    font-size: 17px;
+}
 
-        # Embedding model
-        self.embedding_model = SentenceTransformer(
-            "sentence-transformers/all-MiniLM-L6-v2"
-        )
+.stChatMessage {
+    border-radius: 12px;
+}
 
-    # ======================================
-    # LOAD DOCUMENTS
-    # ======================================
+</style>
+""", unsafe_allow_html=True)
 
-    def load_documents(self):
 
-        if not self.data_dir.exists():
-            raise FileNotFoundError(
-                f"Data folder not found: {self.data_dir}"
-            )
+# ---------------------------------
+# TITLE
+# ---------------------------------
 
-        files = sorted(self.data_dir.rglob("*.txt"))
+st.markdown(
+    '<div class="main-title">🚀 ISRO RAG Assistant</div>',
+    unsafe_allow_html=True
+)
 
-        if not files:
-            raise FileNotFoundError(
-                "No .txt files found inside the data folder."
-            )
+st.markdown(
+    '<div class="subtitle">'
+    'Ask questions about ISRO missions, satellites, '
+    'technology and achievements.'
+    '</div>',
+    unsafe_allow_html=True
+)
 
-        documents = []
+st.divider()
 
-        for file_path in files:
 
-            text = file_path.read_text(
-                encoding="utf-8"
-            ).strip()
+# ---------------------------------
+# GET GROQ API KEY
+# ---------------------------------
 
-            if text:
-                documents.append({
-                    "text": text,
-                    "source": file_path.name
+def get_api_key():
+
+    try:
+        key = st.secrets.get("GROQ_API_KEY")
+
+        if key:
+            return key
+
+    except Exception:
+        pass
+
+    return os.getenv("GROQ_API_KEY")
+
+
+# ---------------------------------
+# INITIALIZE RAG ENGINE
+# ---------------------------------
+
+@st.cache_resource(show_spinner="Loading ISRO documents and AI model...")
+def load_rag_engine(api_key):
+
+    engine = RAGEngine(
+        data_dir="data",
+        api_key=api_key
+    )
+
+    engine.build_index()
+
+    return engine
+
+
+api_key = get_api_key()
+
+if not api_key:
+
+    st.error(
+        "Groq API key is missing. "
+        "Please add GROQ_API_KEY in Streamlit Secrets."
+    )
+
+    st.stop()
+
+
+# ---------------------------------
+# LOAD ENGINE
+# ---------------------------------
+
+try:
+
+    rag = load_rag_engine(api_key)
+
+except Exception as error:
+
+    st.error(
+        f"Unable to initialize the RAG engine: {error}"
+    )
+
+    st.info(
+        "Check your data folder, PDF files and requirements.txt."
+    )
+
+    st.stop()
+
+
+# ---------------------------------
+# SIDEBAR
+# ---------------------------------
+
+with st.sidebar:
+
+    st.title("🚀 ISRO Assistant")
+
+    st.write(
+        "An AI-powered Retrieval Augmented Generation "
+        "application for ISRO documents."
+    )
+
+    st.divider()
+
+    st.subheader("Knowledge Base")
+
+    st.write(f"Documents indexed: {len(set(rag.sources))}")
+
+    st.write(f"Text chunks: {len(rag.chunks)}")
+
+    st.write("AI Model: GPT-OSS 120B")
+
+    st.write("Vector Database: FAISS")
+
+    st.write("Embedding: all-MiniLM-L6-v2")
+
+    st.divider()
+
+    if st.button("Clear Chat", use_container_width=True):
+
+        st.session_state.messages = []
+
+        st.rerun()
+
+
+# ---------------------------------
+# CHAT HISTORY
+# ---------------------------------
+
+if "messages" not in st.session_state:
+
+    st.session_state.messages = []
+
+
+# ---------------------------------
+# DISPLAY PREVIOUS MESSAGES
+# ---------------------------------
+
+for message in st.session_state.messages:
+
+    with st.chat_message(message["role"]):
+
+        st.markdown(message["content"])
+
+        if message.get("sources"):
+
+            with st.expander("View document sources"):
+
+                for source in message["sources"]:
+                    st.write(f"📄 {source}")
+
+
+# ---------------------------------
+# CHAT INPUT
+# ---------------------------------
+
+question = st.chat_input(
+    "Ask anything about ISRO..."
+)
+
+
+if question:
+
+    # Display user question
+
+    st.session_state.messages.append({
+        "role": "user",
+        "content": question
+    })
+
+    with st.chat_message("user"):
+
+        st.markdown(question)
+
+    # Generate answer
+
+    with st.chat_message("assistant"):
+
+        with st.spinner("Searching ISRO documents..."):
+
+            try:
+
+                result = rag.ask(question)
+
+                answer = result["answer"]
+
+                sources = result["sources"]
+
+                st.markdown(answer)
+
+                if sources:
+
+                    with st.expander("View document sources"):
+
+                        for source in sources:
+                            st.write(f"📄 {source}")
+
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": answer,
+                    "sources": sources
                 })
 
-        if not documents:
-            raise ValueError(
-                "The text files are empty."
-            )
+            except Exception as error:
 
-        return documents
-
-    # ======================================
-    # SPLIT DOCUMENTS
-    # ======================================
-
-    def split_documents(
-        self,
-        documents,
-        chunk_size=1000,
-        overlap=200
-    ):
-
-        chunks = []
-
-        for document in documents:
-
-            text = document["text"]
-
-            start = 0
-
-            while start < len(text):
-
-                end = start + chunk_size
-
-                chunk_text = text[start:end].strip()
-
-                if chunk_text:
-
-                    chunks.append({
-                        "text": chunk_text,
-                        "source": document["source"]
-                    })
-
-                start += chunk_size - overlap
-
-        return chunks
-
-    # ======================================
-    # BUILD FAISS INDEX
-    # ======================================
-
-    def build_index(self):
-
-        print("Loading ISRO documents...")
-
-        documents = self.load_documents()
-
-        print("Splitting documents...")
-
-        self.documents = self.split_documents(
-            documents
-        )
-
-        if not self.documents:
-            raise ValueError(
-                "No document chunks were created."
-            )
-
-        texts = [
-            document["text"]
-            for document in self.documents
-        ]
-
-        print("Creating embeddings...")
-
-        embeddings = self.embedding_model.encode(
-            texts,
-            convert_to_numpy=True,
-            normalize_embeddings=True,
-            show_progress_bar=False
-        )
-
-        embeddings = np.asarray(
-            embeddings,
-            dtype=np.float32
-        )
-
-        dimension = embeddings.shape[1]
-
-        self.vector_store = faiss.IndexFlatIP(
-            dimension
-        )
-
-        self.vector_store.add(embeddings)
-
-        print("FAISS index created successfully!")
-
-    # ======================================
-    # RETRIEVE RELEVANT DOCUMENTS
-    # ======================================
-
-    def retrieve_documents(self, question, k=4):
-
-        if self.vector_store is None:
-            raise RuntimeError(
-                "FAISS index is not built."
-            )
-
-        query_embedding = self.embedding_model.encode(
-            [question],
-            convert_to_numpy=True,
-            normalize_embeddings=True,
-            show_progress_bar=False
-        )
-
-        query_embedding = np.asarray(
-            query_embedding,
-            dtype=np.float32
-        )
-
-        total_documents = len(self.documents)
-
-        k = min(k, total_documents)
-
-        scores, indices = self.vector_store.search(
-            query_embedding,
-            k
-        )
-
-        results = []
-
-        for index in indices[0]:
-
-            if index >= 0:
-                results.append(
-                    self.documents[index]
+                st.error(
+                    f"Error generating response: {error}"
                 )
-
-        return results
-
-    # ======================================
-    # GENERATE ANSWER USING GROQ
-    # ======================================
-
-    def ask(self, question):
-
-        relevant_documents = self.retrieve_documents(
-            question,
-            k=4
-        )
-
-        context = "\n\n".join(
-            document["text"]
-            for document in relevant_documents
-        )
-
-        system_prompt = """
-You are an AI assistant specializing in ISRO
-(Indian Space Research Organisation).
-
-Answer questions using the provided context.
-
-Rules:
-1. Give accurate and clear answers.
-2. Use the retrieved context as your primary source.
-3. Do not invent facts or mission details.
-4. If the answer is not available in the context,
-   clearly say that the knowledge base does not
-   contain enough information.
-5. Explain technical concepts in simple language.
-6. Use headings and bullet points when useful.
-"""
-
-        user_prompt = f"""
-ISRO KNOWLEDGE BASE CONTEXT:
-
-{context}
-
-USER QUESTION:
-
-{question}
-
-Provide a clear and informative answer.
-"""
-
-        response = self.client.chat.completions.create(
-
-            model=self.model_name,
-
-            messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": user_prompt
-                }
-            ],
-
-            temperature=0.2,
-
-            max_tokens=1200
-        )
-
-        answer = response.choices[0].message.content
-
-        sources = list(dict.fromkeys(
-            document["source"]
-            for document in relevant_documents
-        ))
-
-        return {
-            "answer": answer,
-            "sources": sources
-        }
