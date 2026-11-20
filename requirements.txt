@@ -1,5 +1,5 @@
 streamlit
-openai
+groq
 sentence-transformers
 faiss-cpu
 numpy
