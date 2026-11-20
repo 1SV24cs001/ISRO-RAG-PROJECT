@@ -1,71 +1,34 @@
 
 import os
 import streamlit as st
-
 from rag_engine import RAGEngine
-
 
 # ---------------------------------
 # PAGE CONFIGURATION
 # ---------------------------------
 
 st.set_page_config(
-    page_title="ISRO RAG Assistant",
+    page_title="ISRO AI Assistant",
     page_icon="🚀",
     layout="wide"
 )
 
 # ---------------------------------
-# CUSTOM CSS
-# ---------------------------------
-
-st.markdown("""
-<style>
-
-.stApp {
-    background-color: #000000;
-    color: black;
-}
-
-.main-title {
-    text-align: center;
-    font-size: 38px;
-    font-weight: bold;
-    color: #60a5fa;
-}
-
-.subtitle {
-    text-align: center;
-    color: #cbd5e1;
-    font-size: 16px;
-}
-
-.stChatMessage {
-    border-radius: 12px;
-}
-
-</style>
-""", unsafe_allow_html=True)
-
-
-# ---------------------------------
 # HEADER
 # ---------------------------------
 
-st.markdown(
-    '<div class="main-title">🚀 ISRO RAG ASSISTANT</div>',
-    unsafe_allow_html=True
-)
+st.title("🚀 ISRO AI Assistant")
 
 st.markdown(
-    '<div class="subtitle">'
-    'Explore ISRO missions, satellites, technology and achievements'
-    '</div>',
+    """
+    <div class="subtitle">
+        Explore ISRO missions, satellites, technology and achievements
+    </div>
+    """,
     unsafe_allow_html=True
 )
 
 st.divider()
-
 
 # ---------------------------------
 # API CONFIGURATION
@@ -76,15 +39,14 @@ api_key = st.secrets.get(
     os.getenv("GROQ_API_KEY", "")
 )
 
-if api_key:
-    os.environ["OPENAI_API_KEY"] = api_key
-else:
+if not api_key:
     st.error(
         "Groq API key is missing. "
         "Configure GROQ_API_KEY in Streamlit secrets."
     )
     st.stop()
 
+os.environ["OPENAI_API_KEY"] = api_key
 
 # ---------------------------------
 # LOAD RAG ENGINE
@@ -92,11 +54,8 @@ else:
 
 @st.cache_resource
 def load_rag_engine():
-
     engine = RAGEngine(data_dir="data")
-
     engine.build_index()
-
     return engine
 
 
@@ -107,7 +66,6 @@ try:
 except Exception as e:
     st.error(f"Unable to load documents: {e}")
     st.stop()
-
 
 # ---------------------------------
 # SIDEBAR
@@ -144,7 +102,6 @@ with st.sidebar:
 
     st.caption("Powered by RAG + FAISS + Streamlit")
 
-
 # ---------------------------------
 # CHAT HISTORY
 # ---------------------------------
@@ -152,19 +109,18 @@ with st.sidebar:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-
-# Display previous messages
-
 for message in st.session_state.messages:
 
     with st.chat_message(message["role"]):
+
         st.markdown(message["content"])
 
         if message.get("sources"):
+
             with st.expander("📚 Sources"):
+
                 for source in message["sources"]:
                     st.write("•", source)
-
 
 # ---------------------------------
 # CHAT INPUT
@@ -173,7 +129,6 @@ for message in st.session_state.messages:
 question = st.chat_input(
     "Ask anything about ISRO..."
 )
-
 
 # ---------------------------------
 # GENERATE ANSWER
@@ -203,6 +158,7 @@ if question:
                 st.markdown(answer)
 
                 with st.expander("📚 Source Documents"):
+
                     for source in sources:
                         st.write("📄", source)
 
@@ -214,4 +170,6 @@ if question:
 
             except Exception as e:
 
-                st.error(f"Error generating response: {e}")
+                st.error(
+                    f"Error generating response: {e}"
+                )
