@@ -10,7 +10,7 @@ from sentence_transformers import SentenceTransformer
 
 class RAGEngine:
 
-    def __init__(self, data_dir="data"):
+    def __init__(self, data_dir="data", api_key=None):
 
         self.data_dir = data_dir
 
@@ -19,8 +19,8 @@ class RAGEngine:
             "all-MiniLM-L6-v2"
         )
 
-        # Initialize Groq API
-        api_key = os.getenv("GROQ_API_KEY")
+        # Get Groq API key
+        api_key = api_key or os.getenv("GROQ_API_KEY")
 
         if not api_key:
             raise ValueError(
@@ -28,9 +28,10 @@ class RAGEngine:
                 "Please configure it in Streamlit Secrets."
             )
 
-        self.client = Groq(
-            api_key=api_key
-        )
+        self.client = Groq(api_key=api_key)
+
+        # Updated Groq model
+        self.model_name = "openai/gpt-oss-120b"
 
         self.chunks = []
         self.sources = []
@@ -49,12 +50,12 @@ class RAGEngine:
                 f"Data folder not found: {self.data_dir}"
             )
 
-        for filename in os.listdir(self.data_dir):
+        for filename in sorted(os.listdir(self.data_dir)):
 
-            path = os.path.join(
-                self.data_dir,
-                filename
-            )
+            path = os.path.join(self.data_dir, filename)
+
+            if not os.path.isfile(path):
+                continue
 
             text = ""
 
@@ -64,9 +65,7 @@ class RAGEngine:
                 reader = PdfReader(path)
 
                 for page in reader.pages:
-                    text += (
-                        page.extract_text() or ""
-                    ) + "\n"
+                    text += (page.extract_text() or "") + "\n"
 
             # Read DOCX
             elif filename.lower().endswith(".docx"):
@@ -96,29 +95,20 @@ class RAGEngine:
     # SPLIT TEXT INTO CHUNKS
     # ---------------------------------
 
-    def split_text(
-        self,
-        text,
-        chunk_size=700,
-        overlap=100
-    ):
+    def split_text(self, text, chunk_size=700, overlap=100):
 
         words = text.split()
+
+        if chunk_size <= overlap:
+            raise ValueError(
+                "Chunk size must be greater than overlap."
+            )
 
         chunks = []
 
         step = chunk_size - overlap
 
-        if step <= 0:
-            raise ValueError(
-                "Chunk size must be greater than overlap."
-            )
-
-        for start in range(
-            0,
-            len(words),
-            step
-        ):
+        for start in range(0, len(words), step):
 
             chunk = " ".join(
                 words[start:start + chunk_size]
@@ -149,36 +139,29 @@ class RAGEngine:
             for chunk in text_chunks:
 
                 self.chunks.append(chunk)
-
-                self.sources.append(
-                    document["filename"]
-                )
+                self.sources.append(document["filename"])
 
         if not self.chunks:
             raise ValueError(
                 "No text chunks generated from documents."
             )
 
-        # Generate embeddings
         embeddings = self.embedder.encode(
             self.chunks,
             convert_to_numpy=True,
             show_progress_bar=False
         )
 
-        embeddings = embeddings.astype(
-            "float32"
+        embeddings = np.asarray(
+            embeddings,
+            dtype="float32"
         )
 
-        # Normalize embeddings
         faiss.normalize_L2(embeddings)
 
         dimension = embeddings.shape[1]
 
-        # Create FAISS index
-        self.index = faiss.IndexFlatIP(
-            dimension
-        )
+        self.index = faiss.IndexFlatIP(dimension)
 
         self.index.add(embeddings)
 
@@ -190,29 +173,24 @@ class RAGEngine:
     # RETRIEVE RELEVANT DOCUMENTS
     # ---------------------------------
 
-    def retrieve(
-        self,
-        question,
-        top_k=4
-    ):
+    def retrieve(self, question, top_k=4):
 
         if self.index is None:
             self.build_index()
 
-        # Generate question embedding
         query_embedding = self.embedder.encode(
             [question],
             convert_to_numpy=True
-        ).astype("float32")
-
-        faiss.normalize_L2(
-            query_embedding
         )
 
-        k = min(
-            top_k,
-            len(self.chunks)
+        query_embedding = np.asarray(
+            query_embedding,
+            dtype="float32"
         )
+
+        faiss.normalize_L2(query_embedding)
+
+        k = min(top_k, len(self.chunks))
 
         scores, indices = self.index.search(
             query_embedding,
@@ -221,22 +199,15 @@ class RAGEngine:
 
         results = []
 
-        for score, idx in zip(
-            scores[0],
-            indices[0]
-        ):
+        for score, idx in zip(scores[0], indices[0]):
 
             if idx == -1:
                 continue
 
             results.append({
-
                 "text": self.chunks[idx],
-
                 "source": self.sources[idx],
-
                 "score": float(score)
-
             })
 
         return results
@@ -248,11 +219,8 @@ class RAGEngine:
     def ask(self, question):
 
         if not question or not question.strip():
-            raise ValueError(
-                "Please enter a question."
-            )
+            raise ValueError("Please enter a question.")
 
-        # Retrieve relevant chunks
         results = self.retrieve(
             question,
             top_k=4
@@ -267,30 +235,24 @@ class RAGEngine:
                 "sources": []
             }
 
-        # Prepare context
         context = "\n\n".join(
-
             f"Source: {result['source']}\n"
             f"Content: {result['text']}"
-
             for result in results
-
         )
 
-        # Prepare prompt
         prompt = f"""
 You are an intelligent ISRO RAG Assistant.
 
-Your task is to answer questions about the
-Indian Space Research Organisation (ISRO).
+Answer questions about the Indian Space Research Organisation (ISRO).
 
 IMPORTANT RULES:
 
 1. Answer using only the provided document context.
 2. Do not invent information.
 3. If the answer is unavailable in the context,
-   clearly mention that the uploaded documents
-   do not contain sufficient information.
+   clearly say that the uploaded documents do not
+   contain sufficient information.
 4. Give clear and simple explanations.
 5. Use bullet points when appropriate.
 
@@ -305,46 +267,38 @@ USER QUESTION:
 ANSWER:
 """
 
-       # Call Groq API
-response = self.client.chat.completions.create(
+        response = self.client.chat.completions.create(
 
-    model="openai/gpt-oss-120b",
+            model=self.model_name,
 
-    messages=[
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an accurate ISRO document-based "
+                        "question answering assistant. "
+                        "Use only the supplied context."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
 
-        {
-            "role": "system",
-            "content": (
-                "You are an accurate ISRO "
-                "document-based question answering assistant."
-            )
-        },
+            temperature=0.2,
 
-        {
-            "role": "user",
-            "content": prompt
-        }
-
-    ],
-
-    temperature=0.2,
-
-    max_tokens=1500
-
-)
+            max_completion_tokens=1500
+        )
 
         answer = response.choices[0].message.content
 
-        # Return answer and sources
         return {
-
-            "answer": answer,
-
+            "answer": answer or "No answer was generated.",
             "sources": list(
                 dict.fromkeys(
                     result["source"]
                     for result in results
                 )
             )
-
         }
