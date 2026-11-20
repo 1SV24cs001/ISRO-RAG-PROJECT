@@ -72,16 +72,16 @@ st.divider()
 # ---------------------------------
 
 api_key = st.secrets.get(
-    "OPENAI_API_KEY",
-    os.getenv("OPENAI_API_KEY", "")
+    "GROQ_API_KEY",
+    os.getenv("GROQ_API_KEY", "")
 )
 
 if api_key:
     os.environ["OPENAI_API_KEY"] = api_key
 else:
     st.error(
-        "OpenAI API key is missing. "
-        "Configure OPENAI_API_KEY in Streamlit secrets."
+        "Groq API key is missing. "
+        "Configure GROQ_API_KEY in Streamlit secrets."
     )
     st.stop()
 
